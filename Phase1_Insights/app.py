@@ -56,9 +56,21 @@ quarters     = quarters_df["report_date"].tolist()
 
 # ── sidebar ──────────────────────────────────────────────────────────────────────
 st.sidebar.title("📊 SEC 13F Insights")
-st.sidebar.caption("Phase 1 — Holdings Intelligence")
 
-PAGES = [
+# ── check if security_master exists ─────────────────────────────────────────────
+@st.cache_data(ttl=300)
+def has_security_master():
+    try:
+        n = pd.read_sql_query(
+            "SELECT COUNT(*) AS n FROM security_master", get_conn()
+        ).iloc[0]["n"]
+        return n > 0
+    except Exception:
+        return False
+
+_has_sm = has_security_master()
+
+P1_PAGES = [
     "📊 Dataset Overview",
     "🏦 Manager Holdings",
     "📈 Stock Tracker",
@@ -69,7 +81,26 @@ PAGES = [
     "🆕 New & Exited Positions",
 ]
 
-page = st.sidebar.radio("Navigate", PAGES, label_visibility="collapsed")
+P2_PAGES = [
+    "🔬 Security Universe",
+    "📂 Classification Explorer",
+    "💡 Security Type Signals",
+] if _has_sm else []
+
+st.sidebar.caption("Phase 1 — Holdings Intelligence")
+page = st.sidebar.radio("Navigate", P1_PAGES, label_visibility="collapsed")
+
+if P2_PAGES:
+    st.sidebar.divider()
+    st.sidebar.caption("Phase 2 — Security Classification")
+    page2 = st.sidebar.radio("Navigate ", P2_PAGES, label_visibility="collapsed")
+    # unify selection
+    if page2:
+        page = page2
+else:
+    if not _has_sm:
+        st.sidebar.divider()
+        st.sidebar.info("Run `python phase2.py` to unlock Phase 2 insights.")
 
 st.sidebar.divider()
 st.sidebar.caption(f"DB: `{DB_PATH.name}`")
@@ -762,3 +793,413 @@ elif page == "🆕 New & Exited Positions":
             fig2.update_layout(yaxis={"categoryorder": "total ascending"}, height=460)
             st.plotly_chart(fig2, width='stretch')
             st.dataframe(exited, use_container_width=True, hide_index=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# PAGE 9 — Security Universe  [Phase 2]
+# ══════════════════════════════════════════════════════════════════════════════════
+elif page == "🔬 Security Universe":
+    st.title("🔬 Security Universe")
+    st.caption("Phase 2 · Classification of all unique securities in the dataset.")
+
+    sm = qdf("""
+        SELECT classification, confidence_score, classification_source,
+               cusip, issuer_name, class_title_raw,
+               first_seen_quarter, last_seen_quarter, times_held, manual_override
+        FROM security_master
+        ORDER BY times_held DESC
+    """)
+
+    total = len(sm)
+    classified = (sm["classification"] != "other").sum()
+    avg_conf = sm["confidence_score"].mean()
+
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("Total Securities",    f"{total:,}")
+    k2.metric("Classified (non-other)", f"{classified:,} ({classified/total*100:.1f}%)")
+    k3.metric("Avg Confidence",      f"{avg_conf*100:.1f}%")
+    k4.metric("Manual Overrides",    int(sm["manual_override"].sum()))
+
+    st.divider()
+    c1, c2 = st.columns(2)
+
+    with c1:
+        # By classification — count
+        by_cls = (
+            sm.groupby("classification")
+            .agg(securities=("cusip", "count"),
+                 total_holdings=("times_held", "sum"),
+                 avg_conf=("confidence_score", "mean"))
+            .reset_index()
+            .sort_values("securities", ascending=False)
+        )
+        by_cls["avg_conf_%"] = (by_cls["avg_conf"] * 100).round(1)
+        fig = px.bar(
+            by_cls, x="classification", y="securities",
+            color="avg_conf_%", color_continuous_scale="Blues",
+            title="Securities by Classification",
+            labels={"classification": "Type", "securities": "# Securities",
+                    "avg_conf_%": "Avg Conf %"},
+            text="securities",
+        )
+        fig.update_traces(textposition="outside")
+        st.plotly_chart(fig, width='stretch')
+
+    with c2:
+        fig2 = px.pie(
+            by_cls[by_cls["classification"] != "other"],
+            names="classification", values="total_holdings",
+            title="Holdings Distribution by Security Type (excl. other)",
+            hole=0.35,
+        )
+        st.plotly_chart(fig2, width='stretch')
+
+    # Confidence distribution
+    bins = [0, 0.65, 0.80, 0.95, 1.01]
+    labels = ["Weak (<0.65)", "Low (0.65–0.79)", "Medium (0.80–0.94)", "High (≥0.95)"]
+    sm["conf_band"] = pd.cut(sm["confidence_score"], bins=bins, labels=labels, right=False)
+    conf_dist = sm["conf_band"].value_counts().reset_index()
+    conf_dist.columns = ["band", "count"]
+    conf_order = ["High (≥0.95)", "Medium (0.80–0.94)", "Low (0.65–0.79)", "Weak (<0.65)"]
+    conf_dist["band"] = pd.Categorical(conf_dist["band"], categories=conf_order, ordered=True)
+    conf_dist = conf_dist.sort_values("band")
+    fig3 = px.bar(
+        conf_dist, x="count", y="band", orientation="h",
+        color="band",
+        color_discrete_map={
+            "High (≥0.95)": "#1d4ed8",
+            "Medium (0.80–0.94)": "#60a5fa",
+            "Low (0.65–0.79)": "#fbbf24",
+            "Weak (<0.65)": "#f87171",
+        },
+        title="Confidence Score Distribution",
+        labels={"count": "# Securities", "band": "Confidence Band"},
+        text="count",
+    )
+    fig3.update_traces(textposition="outside")
+    fig3.update_layout(showlegend=False, height=300)
+    st.plotly_chart(fig3, width='stretch')
+
+    # Source breakdown
+    src = (sm.groupby("classification_source")["cusip"]
+           .count().reset_index()
+           .rename(columns={"cusip": "count"})
+           .sort_values("count", ascending=False))
+    with st.expander("Classification source breakdown"):
+        st.dataframe(src, use_container_width=True, hide_index=True)
+
+    # Full table with filter
+    st.subheader("Explore Security Master")
+    cls_filter = st.multiselect(
+        "Filter by classification",
+        sorted(sm["classification"].unique()),
+        default=[]
+    )
+    disp = sm if not cls_filter else sm[sm["classification"].isin(cls_filter)]
+    st.caption(f"Showing {len(disp):,} of {total:,} securities")
+    st.dataframe(
+        disp[["cusip", "issuer_name", "class_title_raw", "classification",
+              "confidence_score", "classification_source",
+              "first_seen_quarter", "last_seen_quarter", "times_held"]],
+        use_container_width=True, hide_index=True, height=450
+    )
+    csv_bytes = disp.to_csv(index=False).encode()
+    st.download_button("⬇️ Download security_master.csv", csv_bytes,
+                       "security_master.csv", "text/csv")
+
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# PAGE 10 — Classification Explorer  [Phase 2]
+# ══════════════════════════════════════════════════════════════════════════════════
+elif page == "📂 Classification Explorer":
+    st.title("📂 Classification Explorer")
+    st.caption("Phase 2 · Browse holdings enriched with security classification.")
+
+    c1, c2, c3 = st.columns([2, 1, 1])
+    with c1:
+        quarter = st.selectbox("Quarter", quarters)
+    with c2:
+        mgr_name = st.selectbox("Manager", ["All Managers"] + list(managers_map.keys()))
+    with c3:
+        cls_choices = qdf(
+            "SELECT DISTINCT classification FROM security_master ORDER BY classification"
+        )["classification"].tolist()
+        cls_filter = st.multiselect("Security type", cls_choices)
+
+    # Build query
+    params: list = [quarter]
+    mgr_clause = ""
+    cls_clause = ""
+
+    if mgr_name != "All Managers":
+        mgr_clause = "AND h.cik = ?"
+        params.append(managers_map[mgr_name])
+    if cls_filter:
+        placeholders = ",".join("?" * len(cls_filter))
+        cls_clause   = f"AND sm.classification IN ({placeholders})"
+        params.extend(cls_filter)
+
+    df = qdf(f"""
+        SELECT f.manager_name,
+               h.issuer_name, h.cusip,
+               sm.classification,
+               ROUND(sm.confidence_score * 100, 1)       AS conf_pct,
+               sm.classification_source,
+               h.class_title,
+               ROUND(h.value_thousands / 1000.0, 2)       AS value_usd_m,
+               h.shares_principal, h.put_call
+        FROM holdings h
+        JOIN filers f  ON f.cik = h.cik AND f.report_date = h.report_date
+        LEFT JOIN security_master sm ON sm.cusip = h.cusip
+        WHERE h.report_date = ?
+        {mgr_clause}
+        {cls_clause}
+        ORDER BY h.value_thousands DESC
+    """, params)
+
+    if df.empty:
+        st.warning("No data for current filters.")
+    else:
+        # KPIs
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Holdings Rows",    f"{len(df):,}")
+        k2.metric("Unique Securities", df["cusip"].nunique())
+        k3.metric("Total Value ($M)", f"${df['value_usd_m'].sum():,.1f}M")
+        k4.metric("Avg Confidence",   f"{df['conf_pct'].mean():.1f}%")
+
+        # AUM by type
+        by_type = (
+            df.groupby("classification")["value_usd_m"]
+            .sum().reset_index()
+            .sort_values("value_usd_m", ascending=False)
+        )
+        col1, col2 = st.columns(2)
+        with col1:
+            fig = px.bar(
+                by_type, x="classification", y="value_usd_m",
+                title=f"AUM by Security Type — {quarter}",
+                labels={"classification": "Type", "value_usd_m": "Value ($M)"},
+                color="classification",
+            )
+            st.plotly_chart(fig, width='stretch')
+        with col2:
+            fig2 = px.pie(
+                by_type, names="classification", values="value_usd_m",
+                title="AUM Share by Security Type",
+                hole=0.3,
+            )
+            st.plotly_chart(fig2, width='stretch')
+
+        # AUM by type over time (all quarters, same manager/cls filters)
+        trend_params: list = []
+        trend_mgr = ""
+        trend_cls = ""
+        if mgr_name != "All Managers":
+            trend_mgr = "AND h.cik = ?"
+            trend_params.append(managers_map[mgr_name])
+        if cls_filter:
+            placeholders = ",".join("?" * len(cls_filter))
+            trend_cls    = f"AND sm.classification IN ({placeholders})"
+            trend_params.extend(cls_filter)
+
+        trend = qdf(f"""
+            SELECT h.report_date,
+                   COALESCE(sm.classification, 'unclassified') AS classification,
+                   ROUND(SUM(h.value_thousands)/1e3, 2) AS value_m
+            FROM holdings h
+            LEFT JOIN security_master sm ON sm.cusip = h.cusip
+            WHERE 1=1 {trend_mgr} {trend_cls}
+            GROUP BY h.report_date, classification
+            ORDER BY h.report_date
+        """, trend_params)
+
+        fig3 = px.bar(
+            trend, x="report_date", y="value_m", color="classification",
+            barmode="stack",
+            title="AUM by Security Type Over Time",
+            labels={"report_date": "Quarter", "value_m": "Value ($M)",
+                    "classification": "Type"},
+        )
+        st.plotly_chart(fig3, width='stretch')
+
+        st.subheader("Holdings Detail")
+        st.dataframe(df, use_container_width=True, hide_index=True, height=450)
+        st.download_button(
+            "⬇️ Download CSV", df.to_csv(index=False).encode(),
+            f"classified_holdings_{quarter}.csv", "text/csv"
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# PAGE 11 — Security Type Signals  [Phase 2]
+# ══════════════════════════════════════════════════════════════════════════════════
+elif page == "💡 Security Type Signals":
+    st.title("💡 Security Type Signals")
+    st.caption("Phase 2 · Options activity, ETF flows, ADR exposure, and "
+               "bond allocation trends derived from classified security types.")
+
+    quarter = st.selectbox("Reference quarter", quarters)
+
+    # ── Options activity ─────────────────────────────────────────────────────────
+    st.subheader("Options Activity")
+    opts = qdf("""
+        SELECT f.manager_name, h.report_date,
+               SUM(CASE WHEN sm.classification='option_call' THEN h.value_thousands ELSE 0 END) AS calls_k,
+               SUM(CASE WHEN sm.classification='option_put'  THEN h.value_thousands ELSE 0 END) AS puts_k,
+               COUNT(CASE WHEN sm.classification='option_call' THEN 1 END) AS n_calls,
+               COUNT(CASE WHEN sm.classification='option_put'  THEN 1 END) AS n_puts
+        FROM holdings h
+        JOIN filers f ON f.cik=h.cik AND f.report_date=h.report_date
+        LEFT JOIN security_master sm ON sm.cusip=h.cusip
+        WHERE h.report_date=?
+        GROUP BY f.manager_name, h.report_date
+        HAVING (calls_k + puts_k) > 0
+        ORDER BY (calls_k + puts_k) DESC
+    """, (quarter,))
+
+    if opts.empty:
+        st.info("No options positions found for this quarter.")
+    else:
+        opts["call_value_m"] = (opts["calls_k"] / 1e3).round(2)
+        opts["put_value_m"]  = (opts["puts_k"]  / 1e3).round(2)
+        opts["put_call_ratio"] = (
+            opts["puts_k"] / opts["calls_k"].replace(0, float("nan"))
+        ).round(2)
+        fig = px.bar(
+            opts.melt(id_vars="manager_name",
+                      value_vars=["call_value_m", "put_value_m"],
+                      var_name="type", value_name="value_m"),
+            x="manager_name", y="value_m", color="type",
+            barmode="group",
+            title=f"Options Exposure by Manager — {quarter}",
+            labels={"manager_name": "Manager", "value_m": "Value ($M)", "type": "Type"},
+            color_discrete_map={"call_value_m": "#22c55e", "put_value_m": "#ef4444"},
+        )
+        st.plotly_chart(fig, width='stretch')
+        st.dataframe(opts[["manager_name", "call_value_m", "put_value_m",
+                            "n_calls", "n_puts", "put_call_ratio"]],
+                     use_container_width=True, hide_index=True)
+
+    # ── ETF flows ─────────────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("ETF Allocation Over Time")
+
+    etf_trend = qdf("""
+        SELECT h.report_date,
+               ROUND(SUM(CASE WHEN sm.classification='etf' THEN h.value_thousands ELSE 0 END)/1e3, 2) AS etf_m,
+               ROUND(SUM(h.value_thousands)/1e3, 2) AS total_m
+        FROM holdings h
+        LEFT JOIN security_master sm ON sm.cusip=h.cusip
+        GROUP BY h.report_date ORDER BY h.report_date
+    """)
+    etf_trend["etf_pct"] = (etf_trend["etf_m"] / etf_trend["total_m"] * 100).round(2)
+
+    col1, col2 = st.columns(2)
+    with col1:
+        fig2 = px.bar(
+            etf_trend, x="report_date", y="etf_m",
+            title="Total ETF Holdings ($M) Over Time",
+            labels={"report_date": "Quarter", "etf_m": "ETF Value ($M)"},
+            color_discrete_sequence=["#3b82f6"],
+        )
+        st.plotly_chart(fig2, width='stretch')
+    with col2:
+        fig3 = px.line(
+            etf_trend, x="report_date", y="etf_pct",
+            markers=True,
+            title="ETF % of Total AUM Over Time",
+            labels={"report_date": "Quarter", "etf_pct": "ETF %"},
+        )
+        fig3.add_hline(y=etf_trend["etf_pct"].mean(), line_dash="dot",
+                       annotation_text="avg", line_color="gray")
+        st.plotly_chart(fig3, width='stretch')
+
+    # ── ADR Exposure ──────────────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("ADR / International Depositary Receipt Exposure")
+
+    adr_qtr = qdf("""
+        SELECT f.manager_name,
+               ROUND(SUM(CASE WHEN sm.classification='adr' THEN h.value_thousands ELSE 0 END)/1e3, 2) AS adr_m,
+               ROUND(SUM(h.value_thousands)/1e3, 2) AS total_m
+        FROM holdings h
+        JOIN filers f ON f.cik=h.cik AND f.report_date=h.report_date
+        LEFT JOIN security_master sm ON sm.cusip=h.cusip
+        WHERE h.report_date=?
+        GROUP BY f.manager_name
+        ORDER BY adr_m DESC
+    """, (quarter,))
+    adr_qtr["adr_pct"] = (adr_qtr["adr_m"] / adr_qtr["total_m"] * 100).round(1)
+
+    fig4 = px.bar(
+        adr_qtr, x="manager_name", y="adr_pct",
+        title=f"ADR Allocation % by Manager — {quarter}",
+        labels={"manager_name": "Manager", "adr_pct": "ADR %"},
+        color="adr_m", color_continuous_scale="Oranges",
+        text=adr_qtr["adr_pct"].map(lambda x: f"{x:.1f}%"),
+    )
+    fig4.update_traces(textposition="outside")
+    st.plotly_chart(fig4, width='stretch')
+
+    # Top ADR names across all managers in quarter
+    top_adrs = qdf("""
+        SELECT h.issuer_name, h.cusip,
+               COUNT(DISTINCT h.cik) AS managers_holding,
+               ROUND(SUM(h.value_thousands)/1e3, 2) AS total_value_m
+        FROM holdings h
+        LEFT JOIN security_master sm ON sm.cusip=h.cusip
+        WHERE h.report_date=? AND sm.classification='adr'
+        GROUP BY h.issuer_name, h.cusip
+        ORDER BY total_value_m DESC
+        LIMIT 20
+    """, (quarter,))
+
+    if not top_adrs.empty:
+        with st.expander("Top ADR positions this quarter"):
+            st.dataframe(top_adrs, use_container_width=True, hide_index=True)
+
+    # ── Bond / Fixed Income ───────────────────────────────────────────────────────
+    st.divider()
+    st.subheader("Fixed Income (Bond) Allocation")
+
+    bond_trend = qdf("""
+        SELECT h.report_date,
+               ROUND(SUM(CASE WHEN sm.classification='bond' THEN h.value_thousands ELSE 0 END)/1e3, 2) AS bond_m,
+               ROUND(SUM(h.value_thousands)/1e3, 2) AS total_m
+        FROM holdings h
+        LEFT JOIN security_master sm ON sm.cusip=h.cusip
+        GROUP BY h.report_date ORDER BY h.report_date
+    """)
+    bond_trend["bond_pct"] = (
+        bond_trend["bond_m"] / bond_trend["total_m"] * 100
+    ).round(2)
+
+    fig5 = px.line(
+        bond_trend, x="report_date", y="bond_pct",
+        markers=True,
+        title="Bond Allocation % Over Time",
+        labels={"report_date": "Quarter", "bond_pct": "Bond %"},
+        color_discrete_sequence=["#f59e0b"],
+    )
+    st.plotly_chart(fig5, width='stretch')
+
+    # Preferred stock tracker
+    st.divider()
+    st.subheader("Preferred Stock Holdings")
+    pref = qdf("""
+        SELECT h.issuer_name, h.cusip,
+               h.report_date,
+               COUNT(DISTINCT h.cik) AS managers,
+               ROUND(SUM(h.value_thousands)/1e3, 2) AS value_m
+        FROM holdings h
+        LEFT JOIN security_master sm ON sm.cusip=h.cusip
+        WHERE sm.classification='preferred'
+        GROUP BY h.issuer_name, h.cusip, h.report_date
+        ORDER BY h.report_date DESC, value_m DESC
+        LIMIT 30
+    """)
+    if pref.empty:
+        st.info("No preferred stock positions found.")
+    else:
+        st.dataframe(pref, use_container_width=True, hide_index=True)
+
