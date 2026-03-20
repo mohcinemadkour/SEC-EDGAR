@@ -2,6 +2,12 @@
 
 Builds a production-grade **manager–security–quarter panel** from SEC EDGAR structured 13F-HR filings (2010–present).
 
+## 🚀 Live Dashboard
+
+**[https://sec-edgar-2cjs.onrender.com/](https://sec-edgar-2cjs.onrender.com/)**
+
+Interactive Streamlit dashboard with 8 analytics pages: dataset overview, manager holdings, stock tracker, consensus signals, manager panel, portfolio overlap, sector rotation, and new/exited positions.
+
 ---
 
 ## Schema
