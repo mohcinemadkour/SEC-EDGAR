@@ -7,6 +7,9 @@
 # CSV exports (generated outputs)
 *.csv
 
+# Test reports (generated outputs)
+data_check/reports/
+
 # Python cache
 __pycache__/
 *.pyc
