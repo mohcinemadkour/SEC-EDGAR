@@ -72,8 +72,8 @@ _has_sm = has_security_master()
 
 P1_PAGES = [
     "ℹ️ About",
-    "� How to Use",
-    "�📊 Dataset Overview",
+    "📖 How to Use",
+    "📊 Dataset Overview",
     "🏦 Manager Holdings",
     "📈 Stock Tracker",
     "🎯 Consensus Signals",
