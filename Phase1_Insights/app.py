@@ -306,6 +306,15 @@ elif page == "📖 How to Use":
 elif page == "📊 Dataset Overview":
     st.title("📊 Dataset Overview")
     st.caption("High-level statistics across all managers, filings, and quarters.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        | Chart | What it shows | Question it answers |
+        |---|---|---|
+        | **Total AUM by Quarter** | Sum of all reported holdings values each quarter | Is institutional participation growing or shrinking? |
+        | **Filings & Active Managers per Year** | Bar height = number of filings; color = number of unique managers | Which years had the most 13F activity? |
+        | **Manager AUM (latest quarter)** | Each manager's total reported portfolio value | Who holds the most assets in the most recent quarter? |
+        | **Dataset Breadth Over Time** | Three lines: total rows, unique securities, active managers | Is the dataset expanding in coverage over time? |
+        """)
 
     stats = qdf("""
         SELECT
@@ -364,6 +373,7 @@ elif page == "📊 Dataset Overview":
         )
         fig2.update_traces(texttemplate="%{text} mgrs", textposition="outside")
         st.plotly_chart(fig2, width='stretch')
+        st.caption("💡 **Read it:** Bar height = total filings that year. Color intensity = manager count. A tall bar with dark color = many managers actively filing.")
 
     latest_q = quarters[0] if quarters else None
     if latest_q:
@@ -385,6 +395,7 @@ elif page == "📊 Dataset Overview":
         )
         fig3.update_layout(yaxis={"categoryorder": "total ascending"}, height=400)
         st.plotly_chart(fig3, width='stretch')
+        st.caption("💡 **Read it:** Longer bars = larger AUM. Color = number of unique positions. A manager with short bar but many positions holds many small stakes rather than a concentrated portfolio.")
 
     hc = qdf("""
         SELECT report_date,
@@ -402,6 +413,7 @@ elif page == "📊 Dataset Overview":
         labels={"report_date": "Quarter", "value": "Count", "variable": "Metric"},
     )
     st.plotly_chart(fig4, width='stretch')
+    st.caption("💡 **Read it:** Three lines growing together = the dataset is expanding in breadth (more securities) and depth (more managers). A divergence — e.g. more rows but same unique CUSIPs — means existing managers are adding more positions.")
 
 
 # ══════════════════════════════════════════════════════════════════════════════════
@@ -410,6 +422,16 @@ elif page == "📊 Dataset Overview":
 elif page == "🏦 Manager Holdings":
     st.title("🏦 Manager Holdings")
     st.caption("Top 25 positions for any manager in any quarter, with QoQ change.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        | Chart | What it shows | Question it answers |
+        |---|---|---|
+        | **Top 25 Holdings bar chart** | Each bar = position value in $M; color = portfolio weight % | Which stocks dominate this manager's book? |
+        | **Holdings by Asset Class pie** | Slice = % of AUM by class title (COM, ETF, ADR...) | How diversified is this manager across security types? |
+        | **QoQ Change table** | Value now vs. prior quarter + absolute and % change | Did this manager add to, trim, or hold steady on each position? |
+
+        **Top-10 Concentration** metric: >50% means highly concentrated; <20% means broadly diversified.
+        """)
 
     c1, c2 = st.columns([2, 1])
     with c1:
@@ -494,6 +516,16 @@ elif page == "🏦 Manager Holdings":
 elif page == "📈 Stock Tracker":
     st.title("📈 Stock Tracker")
     st.caption("Track any security across all quarters and managers.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        | Chart | What it shows | Question it answers |
+        |---|---|---|
+        | **Reported Value Over Time** | Each line = one manager's dollar exposure to this stock per quarter | Which managers have been consistently bullish? Who recently entered or exited? |
+        | **Shares Held Over Time** | Stacked bars show cumulative share count by manager | Is total institutional share ownership growing or shrinking? |
+
+        **Manager count** metric: >3 managers = broadly held. A sudden drop = institutional exit signal.
+        **A line disappearing** from the value chart means that manager fully exited the position.
+        """)
 
     all_cusips = qdf("""
         SELECT DISTINCT cusip, issuer_name FROM holdings ORDER BY issuer_name
@@ -548,6 +580,7 @@ elif page == "📈 Stock Tracker":
             labels={"report_date": "Quarter", "value_usd_m": "Value ($M)", "manager_name": "Manager"},
         )
         st.plotly_chart(fig, width='stretch')
+        st.caption("💡 **Read it:** Converging lines = multiple managers agree on value. Diverging lines = they disagree on sizing. A line going to zero = full exit by that manager.")
 
         fig2 = px.bar(
             hist, x="report_date", y="shares_principal", color="manager_name",
@@ -556,6 +589,7 @@ elif page == "📈 Stock Tracker":
             labels={"report_date": "Quarter", "shares_principal": "Shares", "manager_name": "Manager"},
         )
         st.plotly_chart(fig2, width='stretch')
+        st.caption("💡 **Read it:** A growing stacked bar = more institutional accumulation. A shrinking bar = distribution. Color segments show each manager’s share of total institutional ownership.")
 
         st.subheader("Raw Position Table")
         st.dataframe(hist, use_container_width=True, hide_index=True)
@@ -567,6 +601,16 @@ elif page == "📈 Stock Tracker":
 elif page == "🎯 Consensus Signals":
     st.title("🎯 Consensus Signals")
     st.caption("Securities that multiple managers were buying or selling in a given quarter.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        | Chart | What it shows | Question it answers |
+        |---|---|---|
+        | **Consensus Buys bar chart** | Each bar = a stock; height = how many managers added/initiated it | Which stocks had the broadest institutional conviction buy signal? |
+        | **Consensus Sells bar chart** | Same but for managers cutting positions | Which stocks are institutions collectively walking away from? |
+
+        **Min managers slider:** Set to 2 to see any overlap; set higher (3-4+) to find the strongest conviction signals.
+        **Color intensity** = total dollar value involved. A tall bar with dark color = many managers put big money into it.
+        """)
 
     c1, c2 = st.columns([2, 1])
     with c1:
@@ -645,6 +689,7 @@ elif page == "🎯 Consensus Signals":
             )
             fig.update_xaxes(tickangle=45)
             st.plotly_chart(fig, width='stretch')
+            st.caption("💡 **Read it:** Tallest bars = strongest conviction buys. Dark color = large total dollar inflow. Look for names where both bar height AND color are high — many managers, big money.")
             st.dataframe(buys, use_container_width=True, hide_index=True)
 
     with tab2:
@@ -661,6 +706,7 @@ elif page == "🎯 Consensus Signals":
             )
             fig2.update_xaxes(tickangle=45)
             st.plotly_chart(fig2, width='stretch')
+            st.caption("💡 **Read it:** Tallest bars = most managers cutting simultaneously. A stock with many sellers but low total value = small positions being exited. High value + many sellers = large-scale institutional exit.")
             st.dataframe(sells, use_container_width=True, hide_index=True)
 
 
@@ -670,6 +716,21 @@ elif page == "🎯 Consensus Signals":
 elif page == "🗂️ Manager Panel":
     st.title("🗂️ Manager Panel")
     st.caption("Full holdings panel for any manager — filterable and downloadable as CSV.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        This page shows the **raw holdings table** for one manager across selected quarters.
+
+        | Column | Meaning |
+        |---|---|
+        | `value_thousands` | Market value in $000s (divide by 1,000 for $M) |
+        | `shares_principal` | Number of shares (or face value for bonds) |
+        | `put_call` | Non-empty = this is an options position |
+        | `investment_discretion` | SOLE/SHARED/OTHER — indicates decision-making authority |
+        | `voting_sole/shared/none` | How votes are split for this holding |
+
+        **Filter by quarter** to compare portfolios side-by-side across periods.
+        **Download CSV** to do your own analysis in Excel or Python.
+        """)
 
     c1, c2 = st.columns([2, 1])
     with c1:
@@ -724,6 +785,21 @@ elif page == "🗂️ Manager Panel":
 elif page == "🔗 Portfolio Overlap":
     st.title("🔗 Portfolio Overlap")
     st.caption("Jaccard similarity (shared CUSIPs ÷ union CUSIPs × 100) between managers.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        | Chart | What it shows | Question it answers |
+        |---|---|---|
+        | **Overlap Matrix (heatmap)** | Each cell = % of securities shared between two managers | Which managers are running the most similar strategies? |
+        | **Shared Holdings table** | The actual stocks both managers hold simultaneously | What is the ‘crowded trade’ between two specific managers? |
+
+        **Jaccard score interpretation:**
+        - 0–10% = very different strategies
+        - 10–30% = moderate similarity (common large-cap names)
+        - 30%+ = highly overlapping portfolios (similar style/concentration)
+
+        **Diagonal = 100%** (a manager is 100% similar to itself).
+        Look for off-diagonal dark cells to find copycat or correlated strategies.
+        """)
 
     c1, c2 = st.columns([2, 1])
     with c1:
@@ -780,8 +856,7 @@ elif page == "🔗 Portfolio Overlap":
         )
         fig.update_layout(height=520)
         st.plotly_chart(fig, width='stretch')
-
-        # Shared holdings drilldown
+        st.caption("💡 **Read it:** Darker blue = higher overlap. The diagonal is always 100% (self-similarity). Off-diagonal dark cells reveal fund copycats or similar mandates. Light cells = very different strategies.")
         st.subheader("Shared Holdings Drilldown")
         col_a, col_b = st.columns(2)
         with col_a:
@@ -818,6 +893,17 @@ elif page == "🔗 Portfolio Overlap":
 elif page == "📉 Sector Rotation":
     st.title("📉 Sector Rotation")
     st.caption("How asset-class composition of holdings changed across quarters.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        | Chart | What it shows | Question it answers |
+        |---|---|---|
+        | **Stacked bar (absolute $M)** | Total AUM in each asset class per quarter | How has total exposure to each class grown or shrunk? |
+        | **Stacked bar (% share)** | Each class as a % of total AUM per quarter | Has the manager's allocation shifted toward or away from a class? |
+        | **Class Title Breakdown table** | Cumulative value and % share by class across all quarters | Which class title dominates the portfolio overall? |
+
+        **Radio: Single Manager vs. All Managers Aggregate** — aggregate view reveals market-wide rotation trends.
+        A growing slice in the % chart = managers are rotating **into** that class (risk-on or defensive shift).
+        """)
 
     view = st.radio("View", ["Single Manager", "All Managers Aggregate"], horizontal=True)
 
@@ -855,6 +941,7 @@ elif page == "📉 Sector Rotation":
             labels={"report_date": "Quarter", "value_m": "Value ($M)", "class_title": "Class"},
         )
         st.plotly_chart(fig, width='stretch')
+        st.caption("💡 **Read it:** Taller bars = more AUM in that class that quarter. A growing segment means managers are adding to it. Shrinking = distribution. Use with the % chart below to separate growth from rotation.")
 
         # Percentage view
         pivot   = df.pivot_table(index="report_date", columns="class_title",
@@ -869,6 +956,7 @@ elif page == "📉 Sector Rotation":
             labels={"report_date": "Quarter", "pct": "% of AUM", "class_title": "Class"},
         )
         st.plotly_chart(fig2, width='stretch')
+        st.caption("💡 **Read it:** Each bar sums to 100%. A color growing wider over time = that class is capturing a larger share of AUM. This reveals rotation even when total AUM is rising.")
 
         # Top class titles table
         class_summary = (
@@ -890,6 +978,17 @@ elif page == "📉 Sector Rotation":
 elif page == "🆕 New & Exited Positions":
     st.title("🆕 New & Exited Positions")
     st.caption("Securities newly initiated or completely exited compared to the prior quarter.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        | Chart | What it shows | Question it answers |
+        |---|---|---|
+        | **New Positions bar chart** | Stocks that didn't appear in the prior quarter | What is fresh institutional money flowing into? |
+        | **Exited Positions bar chart** | Stocks fully sold since the prior quarter | What did institutions completely abandon? |
+
+        **A new position with high value ($M)** = a large conviction new bet, not just a small exploratory stake.
+        **Exited positions** with high prior value = significant de-risking or reallocation.
+        Filter by a single manager to track one fund's high-conviction moves quarter by quarter.
+        """)
 
     c1, c2 = st.columns([2, 1])
     with c1:
@@ -994,6 +1093,21 @@ elif page == "🆕 New & Exited Positions":
 elif page == "🔬 Security Universe":
     st.title("🔬 Security Universe")
     st.caption("Phase 2 · Classification of all unique securities in the dataset.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        | Chart | What it shows | Question it answers |
+        |---|---|---|
+        | **Securities by Classification bar** | Count of unique CUSIPs per security type | How many distinct stocks, ETFs, bonds, etc. are in the dataset? |
+        | **Holdings Distribution pie** | % of total holding-rows by security type | What fraction of institutional holdings (by occurrence) are pure equities vs. passives? |
+        | **Confidence Score Distribution** | How certain the classifier is for each security | How reliable is the classification data? |
+
+        **Confidence bands:**
+        - High (≥95%) = rule matched unambiguously (e.g., SEC official list lookup)
+        - Medium (80–94%) = class_title pattern match
+        - Low / Weak = brand name or fallback heuristic — verify manually
+
+        Use the **Explore Security Master** filter to drill into any specific type (e.g. show only `etf` or `warrant`).
+        """)
 
     sm = qdf("""
         SELECT classification, confidence_score, classification_source,
@@ -1107,6 +1221,23 @@ elif page == "🔬 Security Universe":
 elif page == "📂 Classification Explorer":
     st.title("📂 Classification Explorer")
     st.caption("Phase 2 · Browse holdings enriched with security classification.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        This page joins the raw holdings table with the `security_master` classification,
+        letting you filter holdings by security type.
+
+        | Filter | What it does |
+        |---|---|
+        | **Quarter** | Show holdings from a specific quarter-end |
+        | **Classification** | Narrow to one security type (e.g. only ETFs or only options) |
+        | **Manager** | Drill into a single fund’s classified holdings |
+
+        **Use cases:**
+        - Find all options positions any manager held in a quarter
+        - Compare ETF vs. direct stock allocations across managers
+        - Identify bond/fixed-income exposure buried in equity filings
+        - Spot warrants or rights that are often overlooked
+        """)
 
     c1, c2, c3 = st.columns([2, 1, 1])
     with c1:
@@ -1230,6 +1361,18 @@ elif page == "💡 Security Type Signals":
     st.title("💡 Security Type Signals")
     st.caption("Phase 2 · Options activity, ETF flows, ADR exposure, and "
                "bond allocation trends derived from classified security types.")
+    with st.expander("ℹ️ How to read this page", expanded=False):
+        st.markdown("""
+        | Chart | What it shows | Question it answers |
+        |---|---|---|
+        | **Options Activity** | Call vs. put positions by quarter and manager | Are institutions hedging (more puts) or speculating (more calls)? |
+        | **ETF Flows** | ETF holdings value over time | Are managers increasing passive exposure quarter over quarter? |
+        | **ADR Exposure** | ADR holdings by manager | Which funds have the most international equity exposure via ADRs? |
+        | **Bond Allocation** | Bond/fixed-income holdings trend | Is there a rotation from equities into bonds? |
+
+        **A rising put/call ratio** across managers is a broad institutional hedging signal.
+        **Expanding ETF lines** = managers replacing active picks with passive instruments.
+        """)
 
     quarter = st.selectbox("Reference quarter", quarters)
 
