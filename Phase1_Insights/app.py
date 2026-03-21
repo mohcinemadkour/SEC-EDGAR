@@ -88,20 +88,33 @@ P2_PAGES = [
     "💡 Security Type Signals",
 ] if _has_sm else []
 
+# Track which radio group was last touched
+if "nav_group" not in st.session_state:
+    st.session_state.nav_group = "p1"
+
+def _on_p1():
+    st.session_state.nav_group = "p1"
+
+def _on_p2():
+    st.session_state.nav_group = "p2"
+
 st.sidebar.caption("Phase 1 — Holdings Intelligence")
-page = st.sidebar.radio("Navigate", P1_PAGES, label_visibility="collapsed")
+p1_sel = st.sidebar.radio(
+    "Navigate", P1_PAGES, key="p1_nav", on_change=_on_p1, label_visibility="collapsed"
+)
 
 if P2_PAGES:
     st.sidebar.divider()
     st.sidebar.caption("Phase 2 — Security Classification")
-    page2 = st.sidebar.radio("Navigate ", P2_PAGES, label_visibility="collapsed")
-    # unify selection
-    if page2:
-        page = page2
+    p2_sel = st.sidebar.radio(
+        "Navigate ", P2_PAGES, key="p2_nav", on_change=_on_p2, label_visibility="collapsed"
+    )
+    page = p2_sel if st.session_state.nav_group == "p2" else p1_sel
 else:
     if not _has_sm:
         st.sidebar.divider()
         st.sidebar.info("Run `python phase2.py` to unlock Phase 2 insights.")
+    page = p1_sel
 
 st.sidebar.divider()
 st.sidebar.caption(f"DB: `{DB_PATH.name}`")
