@@ -71,6 +71,7 @@ def has_security_master():
 _has_sm = has_security_master()
 
 P1_PAGES = [
+    "ℹ️ About",
     "📊 Dataset Overview",
     "🏦 Manager Holdings",
     "📈 Stock Tracker",
@@ -108,9 +109,82 @@ st.sidebar.caption(f"Quarters: **{len(quarters)}**")
 st.sidebar.caption(f"Managers: **{len(managers_df)}**")
 
 # ══════════════════════════════════════════════════════════════════════════════════
+# PAGE: About
+# ══════════════════════════════════════════════════════════════════════════════════
+if page == "ℹ️ About":
+    st.title("ℹ️ About This Dashboard")
+    st.markdown("""
+    ## What is SEC Form 13F?
+
+    **SEC Form 13F** is a quarterly disclosure report mandated by the U.S. Securities and Exchange
+    Commission (SEC) under Section 13(f) of the Securities Exchange Act of 1934.
+
+    ### Who Must File?
+    Any **institutional investment manager** that exercises investment discretion over
+    **$100 million or more** in qualifying securities is required to file a 13F report
+    within **45 days** after the end of each calendar quarter.
+
+    Filers include hedge funds, mutual funds, pension funds, banks, insurance companies,
+    and investment advisers — including well-known names like Berkshire Hathaway, Bridgewater,
+    Renaissance Technologies, and BlackRock.
+
+    ### What Does It Disclose?
+    Each filing lists all **long positions** held at quarter-end across:
+
+    | Field | Description |
+    |---|---|
+    | **Issuer name** | Name of the company whose securities are held |
+    | **CUSIP** | Unique 9-character security identifier |
+    | **Security class** | e.g., Common Stock, ADR, Put/Call option |
+    | **Shares / principal** | Number of shares or face value held |
+    | **Market value** | Fair market value in USD (thousands) |
+    | **Put / Call** | Flags whether the position is an options contract |
+
+    ### What It Does **Not** Disclose
+    - Short positions or hedges
+    - Cash, bonds, or private equity
+    - Non-U.S. securities (unless listed on a U.S. exchange)
+    - Intraday or intra-quarter trading activity
+
+    ### Why It Matters
+    13F filings are the primary public window into the portfolios of large institutional
+    investors — often called **"smart money"**. Analysts, researchers, and retail investors
+    use them to:
+    - Track what top funds are buying and selling each quarter
+    - Identify consensus positions across multiple managers
+    - Detect emerging sector rotations and thematic trends
+    - Understand concentration and diversification strategies
+
+    ---
+
+    ## About This Project
+
+    This dashboard ingests and analyzes 13F filings retrieved directly from the
+    [SEC EDGAR API](https://efts.sec.gov/LATEST/search-index?q=%2213F%22&dateRange=custom).
+
+    | | |
+    |---|---|
+    | **Phase 1** | Holdings intelligence — manager portfolios, consensus signals, sector rotation, overlap analysis |
+    | **Phase 2** | Security classification — categorizing every CUSIP into stock, ETF, bond, option, ADR, etc. |
+
+    **Data in this dashboard:**
+    """)
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Managers tracked", len(managers_df))
+    col2.metric("Quarters covered", len(quarters))
+    if quarters:
+        col3.metric("Date range", f"{quarters[-1][:7]} → {quarters[0][:7]}")
+
+    st.markdown("""
+    ---
+    *Data source: [SEC EDGAR](https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F)*
+    """)
+
+# ══════════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — Dataset Overview
 # ══════════════════════════════════════════════════════════════════════════════════
-if page == "📊 Dataset Overview":
+elif page == "📊 Dataset Overview":
     st.title("📊 Dataset Overview")
     st.caption("High-level statistics across all managers, filings, and quarters.")
 
