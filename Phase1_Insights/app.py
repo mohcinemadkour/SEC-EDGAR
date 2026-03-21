@@ -72,7 +72,8 @@ _has_sm = has_security_master()
 
 P1_PAGES = [
     "ℹ️ About",
-    "📊 Dataset Overview",
+    "� How to Use",
+    "�📊 Dataset Overview",
     "🏦 Manager Holdings",
     "📈 Stock Tracker",
     "🎯 Consensus Signals",
@@ -193,6 +194,111 @@ if page == "ℹ️ About":
     ---
     *Data source: [SEC EDGAR](https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&type=13F)*
     """)
+
+# ══════════════════════════════════════════════════════════════════════════════════
+# PAGE: How to Use
+# ══════════════════════════════════════════════════════════════════════════════════
+elif page == "📖 How to Use":
+    st.title("📖 How to Use This Dashboard")
+    st.caption("A guide to the questions this data can answer — and where to go to answer them.")
+
+    st.markdown("""
+    This dashboard is built on **SEC Form 13F** filings — quarterly snapshots of what large
+    institutional investors hold. Below is a map of the analytical questions you can explore
+    and which page answers them.
+    """)
+
+    st.subheader("🔍 Questions You Can Answer")
+
+    with st.expander("🏦  Who are the biggest institutional investors in this dataset?", expanded=True):
+        st.markdown("""
+        **Page: Manager Holdings**
+
+        See each manager’s total AUM per quarter, their largest positions by market value,
+        and how their portfolio size has evolved over time.
+        You can filter by manager and date range to compare side-by-side.
+        """)
+
+    with st.expander("📈  How has a specific stock been held across all managers?"):
+        st.markdown("""
+        **Page: Stock Tracker**
+
+        Search for any stock by ticker or company name.
+        See the total number of institutional holders each quarter, aggregate shares and value,
+        and which managers entered or exited the position.
+        """)
+
+    with st.expander("🎯  Which stocks are the most widely held — the ‘consensus’ picks?"):
+        st.markdown("""
+        **Page: Consensus Signals**
+
+        Ranks stocks by the number of managers holding them simultaneously.
+        High consensus = broad institutional conviction.
+        Filter by quarter to see how the consensus basket shifts over time.
+        """)
+
+    with st.expander("🗂️  What does a specific manager’s full portfolio look like?"):
+        st.markdown("""
+        **Page: Manager Panel**
+
+        Drill into a single manager: their complete holdings list, sector breakdown,
+        top 10 positions, and changes vs. the prior quarter (new buys, adds, trims, exits).
+        """)
+
+    with st.expander("🔗  Which managers share the same positions — who overlaps with whom?"):
+        st.markdown("""
+        **Page: Portfolio Overlap**
+
+        Pick two managers and see their shared holdings: common stocks, combined value,
+        and a Jaccard similarity score.
+        Useful for spotting crowded trades or similar investment styles.
+        """)
+
+    with st.expander("📉  Are managers rotating into or out of certain sectors over time?"):
+        st.markdown("""
+        **Page: Sector Rotation**
+
+        Tracks aggregate AUM by GICS sector across all quarters.
+        A rising sector share signals institutional accumulation;
+        a falling share signals distribution.
+        """)
+
+    with st.expander("🆕  Which stocks were newly bought or fully sold in the latest quarter?"):
+        st.markdown("""
+        **Page: New & Exited Positions**
+
+        Lists all stocks that appeared for the first time (new positions) or
+        disappeared entirely (full exits) in a selected quarter.
+        A strong signal of high-conviction directional bets.
+        """)
+
+    with st.expander("🔬  What types of securities are these managers actually holding? *(Phase 2)*"):
+        st.markdown("""
+        **Page: Security Universe / Classification Explorer / Security Type Signals**
+
+        Phase 2 classifies every CUSIP in the dataset into a security type:
+        common stock, ETF, bond, ADR, option, warrant, preferred, etc.
+
+        This unlocks deeper questions:
+        - What fraction of holdings are passive ETFs vs. active stock picks?
+        - Which managers use options as a significant part of their strategy?
+        - Are there bonds or convertibles buried in these “equity” filings?
+
+        > Run `python phase2.py` to enable Phase 2 pages.
+        """)
+
+    st.divider()
+    st.subheader("📊 Data Coverage")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Managers", len(managers_df))
+    col2.metric("Quarters", len(quarters))
+    if quarters:
+        col3.metric("Range", f"{quarters[-1][:7]} → {quarters[0][:7]}")
+
+    st.info(
+        "⚠️ 13F filings only capture **long positions** held at quarter-end. "
+        "Short positions, cash, private holdings, and intra-quarter trades are not visible."
+    )
 
 # ══════════════════════════════════════════════════════════════════════════════════
 # PAGE 1 — Dataset Overview
